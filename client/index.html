@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0b0b1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Xì Tố 5 Lá</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Press Start 2P cho chữ Latin; VT323 (có bộ ký tự tiếng Việt) bù cho các dấu mà Press Start 2P thiếu -->
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ========== MÀN HÌNH VÀO BÀN ========== -->
+    <section id="lobby" class="screen active">
+      <div class="lobby-inner">
+        <div class="logo">
+          <div class="logo-cards" id="logoCards"></div>
+          <h1>XÌ TỐ</h1>
+          <p class="sub">5 LÁ · ONLINE</p>
+        </div>
+
+        <form id="joinForm" class="px-box panel" autocomplete="off">
+          <label>TÊN CỦA BẠN
+            <input id="nameInput" maxlength="12" placeholder="Tay chơi" required>
+          </label>
+          <label>PHÒNG
+            <input id="roomInput" maxlength="16" placeholder="sanh-chinh">
+          </label>
+          <details>
+            <summary>MÁY CHỦ</summary>
+            <input id="serverInput" spellcheck="false">
+          </details>
+          <button type="submit" class="btn btn-gold big">▶ VÀO BÀN</button>
+          <p id="lobbyMsg" class="msg"></p>
+        </form>
+
+        <p class="blink">INSERT COIN</p>
+      </div>
+    </section>
+
+    <!-- ========== MÀN HÌNH BÀN CHƠI ========== -->
+    <section id="game" class="screen">
+      <header class="topbar">
+        <div class="room-tag">PHÒNG <b id="roomName">-</b></div>
+        <div class="hand-tag">VÁN <b id="handNo">0</b></div>
+        <button id="soundBtn" class="icon-btn" aria-label="Bật/tắt âm thanh">♪</button>
+        <button id="leaveBtn" class="icon-btn" aria-label="Rời bàn">✕</button>
+      </header>
+
+      <div id="tableArea">
+        <div class="table">
+          <div class="felt">
+            <div class="pot px-box" id="potBox">
+              <div class="pot-chips" id="potChips"></div>
+              <div class="pot-label">HŨ</div>
+              <div class="pot-amt" id="potAmt">0</div>
+            </div>
+            <div class="center-info" id="centerInfo">CHỜ NGƯỜI CHƠI...</div>
+          </div>
+        </div>
+        <div id="seats"></div>
+        <div id="ticker"></div>
+      </div>
+
+      <div id="myArea">
+        <div class="my-meta">
+          <span id="myHandName" class="hand-name"></span>
+          <span class="my-chips"><i class="chip-ico"></i><b id="myChips">0</b></span>
+        </div>
+        <div id="myCards" class="my-cards"></div>
+      </div>
+
+      <!-- Thumb Zone: mọi nút đều nằm trong tầm ngón cái -->
+      <footer id="thumb">
+        <div class="timer"><div id="timerBar"></div></div>
+
+        <div id="betPanel">
+          <div class="raise-row">
+            <button class="btn btn-mini" id="minusBtn">−</button>
+            <input type="range" id="raiseSlider" min="20" max="1000" step="1" value="20">
+            <button class="btn btn-mini" id="plusBtn">+</button>
+          </div>
+          <div class="quick-row">
+            <button class="btn btn-chip" data-quick="min">MIN</button>
+            <button class="btn btn-chip" data-quick="half">½ HŨ</button>
+            <button class="btn btn-chip" data-quick="pot">HŨ</button>
+            <button class="btn btn-chip" data-quick="all">TẤT TAY</button>
+          </div>
+          <div class="action-row">
+            <button class="btn btn-red" id="foldBtn">ÚP BỎ</button>
+            <button class="btn btn-blue" id="callBtn">THEO</button>
+            <button class="btn btn-gold" id="raiseBtn">TỐ</button>
+          </div>
+        </div>
+
+        <div id="waitPanel">
+          <button class="btn btn-gold big" id="startBtn">▶ BẮT ĐẦU VÁN</button>
+          <p id="waitMsg" class="msg"></p>
+        </div>
+      </footer>
+
+      <!-- Kết quả ván -->
+      <div id="resultModal" class="modal hidden">
+        <div class="px-box panel result-panel">
+          <h2>KẾT QUẢ</h2>
+          <p id="resultText" class="result-text"></p>
+          <div id="resultRows"></div>
+          <button class="btn btn-blue" id="resultClose">OK</button>
+        </div>
+      </div>
+
+      <!-- Mất kết nối -->
+      <div id="discModal" class="modal hidden">
+        <div class="px-box panel">
+          <h2>MẤT KẾT NỐI</h2>
+          <p class="msg">Không liên lạc được với máy chủ.</p>
+          <button class="btn btn-gold" id="reconnectBtn">KẾT NỐI LẠI</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="toast"></div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

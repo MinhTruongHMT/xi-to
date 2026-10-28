@@ -1,0 +1,11 @@
+# Render Blueprint: Render đọc file này để tự tạo Web Service.
+# Render tự cấp biến PORT; server đã đọc PORT nên không cần cấu hình thêm.
+services:
+  - type: web
+    name: xi-to
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    autoDeploy: true
