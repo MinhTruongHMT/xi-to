@@ -25,6 +25,8 @@ pub const NEXT_HAND_MS: u64 = 7_000;
 pub enum Effect {
     TurnTimer { token: u64, ms: u64 },
     NextHand { hand_no: u64, ms: u64 },
+    /// Lưu số chip hiện tại của các tài khoản: (account id, chip).
+    SaveChips(Vec<(String, u64)>),
 }
 
 pub enum Action {
@@ -52,9 +54,20 @@ impl Phase {
     }
 }
 
+/// Thông tin tài khoản mang theo khi vào bàn.
+pub struct Seat {
+    pub name: String,
+    pub avatar: u32,
+    pub account: String,
+    pub chips: u64,
+}
+
 pub struct Player {
     pub id: u64,
     pub name: String,
+    pub avatar: u32,
+    /// Id tài khoản, dùng khi lưu chip.
+    pub account: String,
     pub seat: usize,
     pub chips: u64,
     pub connected: bool,
@@ -73,12 +86,14 @@ pub struct Player {
 }
 
 impl Player {
-    fn new(id: u64, name: String, seat: usize, tx: UnboundedSender<String>) -> Self {
+    fn new(id: u64, info: Seat, seat: usize, tx: UnboundedSender<String>) -> Self {
         Player {
             id,
-            name,
+            name: info.name,
+            avatar: info.avatar,
+            account: info.account,
             seat,
-            chips: START_CHIPS,
+            chips: info.chips,
             connected: true,
             tx,
             in_hand: false,
@@ -187,15 +202,15 @@ impl Room {
     // Người chơi vào / ra
     // ------------------------------------------------------------------
 
-    pub fn add_player(&mut self, id: u64, name: String, tx: UnboundedSender<String>) -> Result<(), String> {
+    pub fn add_player(&mut self, id: u64, info: Seat, tx: UnboundedSender<String>) -> Result<(), String> {
         if self.players.len() >= MAX_PLAYERS {
             return Err(format!("Bàn đã đầy (tối đa {} người)", MAX_PLAYERS));
         }
         let seat = (0..MAX_PLAYERS)
             .find(|s| !self.players.iter().any(|p| p.seat == *s))
             .unwrap();
-        self.event("join", format!("{} vào bàn", name), Some(id));
-        self.players.push(Player::new(id, name, seat, tx));
+        self.event("join", format!("{} vào bàn", info.name), Some(id));
+        self.players.push(Player::new(id, info, seat, tx));
         self.players.sort_by_key(|p| p.seat);
         Ok(())
     }
@@ -223,6 +238,21 @@ impl Room {
             }
         }
         vec![]
+    }
+
+    pub fn chips_of(&self, id: u64) -> Option<u64> {
+        self.idx(id).map(|i| self.players[i].chips)
+    }
+
+    /// Người rời bàn giữa ván đã được lưu chip lúc rời, nên chỉ lưu người còn kết nối.
+    fn save_chips(&self) -> Effect {
+        Effect::SaveChips(
+            self.players
+                .iter()
+                .filter(|p| p.connected)
+                .map(|p| (p.account.clone(), p.chips))
+                .collect(),
+        )
     }
 
     pub fn is_empty(&self) -> bool {
@@ -502,7 +532,7 @@ impl Room {
         let text = headline.join(" · ");
         self.result = Some(json!({ "hand_no": self.hand_no, "text": text, "rows": rows }));
         self.event("win", text, None);
-        vec![Effect::NextHand { hand_no: self.hand_no, ms: NEXT_HAND_MS }]
+        vec![Effect::NextHand { hand_no: self.hand_no, ms: NEXT_HAND_MS }, self.save_chips()]
     }
 
     fn award_uncontested(&mut self, winner: usize) -> Vec<Effect> {
@@ -519,7 +549,7 @@ impl Room {
             "rows": [{ "id": p.id, "name": p.name, "hand": "Không cần lật bài", "cards": p.up, "won": pot }],
         }));
         self.event("win", text, None);
-        vec![Effect::NextHand { hand_no: self.hand_no, ms: NEXT_HAND_MS }]
+        vec![Effect::NextHand { hand_no: self.hand_no, ms: NEXT_HAND_MS }, self.save_chips()]
     }
 
     // ------------------------------------------------------------------
@@ -579,6 +609,7 @@ impl Room {
                 json!({
                     "id": p.id,
                     "name": p.name,
+                    "avatar": p.avatar,
                     "seat": p.seat,
                     "chips": p.chips,
                     "street_bet": p.street_bet,

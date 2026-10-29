@@ -163,7 +163,7 @@ function cardHTML(c, cls = '', style = '') {
   </div>`;
 }
 
-// Avatar nhân vật 8x8 sinh ngẫu nhiên nhưng cố định theo tên.
+// Avatar nhân vật 8x8 sinh từ một số hạt giống (lưu trong tài khoản).
 const HAIRS = [
   ['..HHHH..', '.HHHHHH.'],
   ['.H.HH.H.', '.HHHHHH.'],
@@ -179,7 +179,8 @@ const PALETTE = {
 const hash = (s) => [...s].reduce((h, ch) => (h * 31 + ch.codePointAt(0)) >>> 0, 7);
 
 const avatarCache = {};
-function avatarSvg(name) {
+function avatarSvg(seed) {
+  const name = String(seed);
   if (avatarCache[name]) return avatarCache[name];
   const h = hash(name);
   const rows = [...HAIRS[h % HAIRS.length], ...FACE];
@@ -230,7 +231,13 @@ let ws = null;
 let myId = null;
 let state = null;
 let leaving = false;
-let joinInfo = null;
+let queued = null;      // lệnh chờ gửi khi socket vừa mở
+let lastRoom = null;    // phòng để vào lại sau khi mất kết nối
+let token = store.get('xito-token', '');
+let profile = null;
+let avatarSeed = 0;     // avatar đang chọn ở màn hình hồ sơ (bấm LƯU mới ghi vào tài khoản)
+
+const lobbyMsg = (text) => { $('#lobbyMsg').textContent = text; };
 
 function defaultServer() {
   const param = new URLSearchParams(location.search).get('server');
@@ -241,28 +248,38 @@ function defaultServer() {
   return 'ws://localhost:3000/ws';
 }
 
-function connect(info) {
-  joinInfo = info;
+// Gửi lệnh; chưa có kết nối thì mở socket rồi gửi. Socket mới chưa đăng nhập, nên
+// nếu có token thì gửi `resume` trước (server xử lý lần lượt từng lệnh của một socket).
+function request(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) return send(obj);
+  queued = obj;
+  if (ws && ws.readyState === WebSocket.CONNECTING) return;
   leaving = false;
-  $('#lobbyMsg').textContent = 'ĐANG KẾT NỐI...';
+  lobbyMsg('ĐANG KẾT NỐI...');
+  let sock;
   try {
-    ws = new WebSocket(info.server);
+    sock = ws = new WebSocket($('#serverInput').value.trim() || defaultServer());
   } catch {
-    $('#lobbyMsg').textContent = 'Địa chỉ máy chủ không hợp lệ';
+    lobbyMsg('Địa chỉ máy chủ không hợp lệ');
     return;
   }
-  ws.onopen = () => send({ type: 'join', name: info.name, room: info.room });
-  ws.onmessage = (e) => {
+  sock.onopen = () => {
+    lobbyMsg('');
+    if (token && !['login', 'register', 'resume'].includes(queued?.type)) send({ type: 'resume', token });
+    if (queued) send(queued);
+    queued = null;
+  };
+  sock.onmessage = (e) => {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
     onMessage(msg);
   };
-  ws.onclose = () => {
-    if (leaving) return;
+  sock.onclose = () => {
+    if (sock !== ws || leaving) return;
     if ($('#game').classList.contains('active')) {
       $('#discModal').classList.remove('hidden');
     } else {
-      $('#lobbyMsg').textContent = 'Không kết nối được máy chủ!';
+      lobbyMsg('Không kết nối được máy chủ!');
     }
   };
 }
@@ -271,8 +288,43 @@ function send(obj) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
 }
 
+function setProfile(p) {
+  profile = p;
+  avatarSeed = p.avatar;
+  $('#nameInput').value = p.name;
+  $('#profUser').textContent = p.username;
+  $('#profChips').textContent = p.chips;
+  $('#avatarPreview').innerHTML = avatarSvg(avatarSeed);
+  $('#authForm').classList.add('hidden');
+  $('#joinForm').classList.remove('hidden');
+}
+
+function clearSession() {
+  token = '';
+  store.set('xito-token', '');
+  profile = null;
+  $('#passInput').value = '';
+  $('#joinForm').classList.add('hidden');
+  $('#authForm').classList.remove('hidden');
+}
+
 function onMessage(msg) {
   switch (msg.type) {
+    case 'auth':
+      token = msg.token;
+      store.set('xito-token', token);
+      setProfile(msg.profile);
+      lobbyMsg('');
+      break;
+    case 'profile':
+      setProfile(msg.profile);
+      break;
+    case 'logged_out':
+      clearSession();
+      break;
+    case 'info':
+      toast(msg.msg);
+      break;
     case 'welcome':
       myId = msg.id;
       resetHandView();
@@ -291,9 +343,17 @@ function onMessage(msg) {
       onEvent(msg);
       break;
     case 'error':
+      if (msg.code === 'auth') clearSession();
+      if (msg.code === 'kicked') {
+        // Server sắp đóng socket này; không hiện bảng "mất kết nối".
+        leaving = true;
+        state = null;
+        clearSession();
+        showScreen('lobby');
+      }
       toast(msg.msg);
       Sfx.play('error');
-      if (!$('#game').classList.contains('active')) $('#lobbyMsg').textContent = msg.msg;
+      if (!$('#game').classList.contains('active')) lobbyMsg(msg.msg);
       break;
   }
 }
@@ -375,7 +435,7 @@ function renderSeats() {
     return `<div class="${classes.join(' ')}" data-id="${p.id}">
       ${p.is_dealer ? '<div class="dealer">D</div>' : ''}
       <div class="seat-head">
-        <div class="avatar">${avatarSvg(p.name)}</div>
+        <div class="avatar">${avatarSvg(p.avatar)}</div>
         <div class="seat-info">
           <div class="seat-name">${esc(p.name)}${isMe ? ' ★' : ''}</div>
           <div class="seat-chips">◆${p.chips}</div>
@@ -609,19 +669,56 @@ function bindUI() {
   // Trình duyệt chỉ cho phát âm thanh sau lần chạm đầu tiên.
   document.addEventListener('pointerdown', () => Sfx.unlock(), { once: true });
 
-  $('#nameInput').value = store.get('xito-name', '');
   $('#roomInput').value = store.get('xito-room', '');
   $('#serverInput').value = defaultServer();
 
+  // ---- Đăng nhập / đăng ký ----
+  let authMode = 'login';
+  $$('.tab').forEach((t) => t.addEventListener('click', () => {
+    Sfx.play('click');
+    authMode = t.dataset.tab;
+    $$('.tab').forEach((x) => x.classList.toggle('active', x === t));
+    $('#authForm').classList.toggle('register', authMode === 'register');
+    $('#authBtn').textContent = authMode === 'register' ? '▶ TẠO TÀI KHOẢN' : '▶ ĐĂNG NHẬP';
+    $('#passInput').autocomplete = authMode === 'register' ? 'new-password' : 'current-password';
+    lobbyMsg('');
+  }));
+  $('#authForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    Sfx.play('click');
+    const msg = { type: authMode, username: $('#userInput').value.trim(), password: $('#passInput').value };
+    if (authMode === 'register') msg.name = $('#regNameInput').value.trim();
+    request(msg);
+  });
+
+  // ---- Hồ sơ ----
+  const pickAvatar = (d) => {
+    Sfx.play('tick');
+    avatarSeed = (avatarSeed + d + 1000000) % 1000000;
+    $('#avatarPreview').innerHTML = avatarSvg(avatarSeed);
+  };
+  $('#avPrev').addEventListener('click', () => pickAvatar(-1));
+  $('#avNext').addEventListener('click', () => pickAvatar(1));
+  $('#saveProfileBtn').addEventListener('click', () => {
+    Sfx.play('click');
+    request({ type: 'profile', name: $('#nameInput').value.trim(), avatar: avatarSeed });
+  });
+  $('#logoutBtn').addEventListener('click', () => {
+    Sfx.play('leave');
+    if (ws && ws.readyState === WebSocket.OPEN) send({ type: 'logout' });
+    else clearSession();
+  });
   $('#joinForm').addEventListener('submit', (e) => {
     e.preventDefault();
     Sfx.play('click');
-    const name = $('#nameInput').value.trim() || 'Tay chơi';
     const room = $('#roomInput').value.trim() || 'sanh-chinh';
-    store.set('xito-name', name);
     store.set('xito-room', room);
-    connect({ name, room, server: $('#serverInput').value.trim() || defaultServer() });
+    lastRoom = room;
+    request({ type: 'join', room });
   });
+
+  // Đã đăng nhập từ trước: tự vào lại.
+  if (token) request({ type: 'resume', token });
 
   $('#foldBtn').addEventListener('click', () => { Sfx.play('click'); send({ type: 'fold' }); });
   $('#callBtn').addEventListener('click', () => { Sfx.play('click'); send({ type: 'call' }); });
@@ -663,10 +760,9 @@ function bindUI() {
 
   $('#leaveBtn').addEventListener('click', () => {
     Sfx.play('leave');
-    leaving = true;
-    ws?.close();
+    send({ type: 'leave' }); // vẫn giữ đăng nhập; server gửi lại hồ sơ với số chip mới
     state = null;
-    $('#lobbyMsg').textContent = '';
+    lobbyMsg('');
     showScreen('lobby');
   });
 
@@ -675,7 +771,7 @@ function bindUI() {
     Sfx.play('click');
     $('#discModal').classList.add('hidden');
     showScreen('lobby');
-    if (joinInfo) connect(joinInfo);
+    if (lastRoom) request({ type: 'join', room: lastRoom });
   });
 
   // Mấy lá bài trang trí ở màn hình chờ

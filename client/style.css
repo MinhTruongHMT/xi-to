@@ -160,6 +160,26 @@ button, input { font-family: inherit; color: inherit; }
 .panel details { font-size: 2.4cqw; color: var(--gray); }
 .panel details input { width: 100%; margin-top: 2cqw; font-size: 2.4cqw; }
 .panel summary { cursor: pointer; }
+.panel.hidden { display: none; }
+
+/* Tài khoản */
+.tabs { display: flex; gap: 2cqw; }
+.tab {
+  flex: 1; border: none; cursor: pointer;
+  background: #0b0b1a; color: var(--gray);
+  font-size: 2.6cqw; padding: 2.2cqw 0;
+  box-shadow: 0 0 0 3px #000;
+}
+.tab.active { background: var(--cyan); color: #000; }
+#authForm:not(.register) .reg-only { display: none; }
+.profile-row { display: flex; align-items: center; gap: 2.4cqw; }
+.avatar-big { width: 16cqw; height: 16cqw; box-shadow: 0 0 0 3px #000; }
+.profile-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2cqw; font-size: 2.4cqw; color: var(--gray); }
+.profile-meta span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.profile-meta b { color: var(--gold); font-weight: normal; }
+.input-row { display: flex; gap: 3cqw; }
+.input-row input { flex: 1; min-width: 0; }
+.input-row .btn { font-size: 2.6cqw; padding: 0 3cqw; }
 .msg { font-size: 2.4cqw; line-height: 1.6; color: var(--gold); text-align: center; min-height: 1em; }
 .blink { text-align: center; font-size: 3cqw; color: var(--red); animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }

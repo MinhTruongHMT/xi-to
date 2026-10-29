@@ -9,3 +9,9 @@ services:
     dockerContext: .
     healthCheckPath: /
     autoDeploy: true
+    # Điền giá trị trong Render Dashboard (sync: false = không lưu trong git).
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false

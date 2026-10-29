@@ -24,20 +24,53 @@
           <p class="sub">5 LÁ · ONLINE</p>
         </div>
 
-        <form id="joinForm" class="px-box panel" autocomplete="off">
-          <label>TÊN CỦA BẠN
-            <input id="nameInput" maxlength="12" placeholder="Tay chơi" required>
+        <!-- Đăng nhập / đăng ký -->
+        <form id="authForm" class="px-box panel">
+          <div class="tabs">
+            <button type="button" class="tab active" data-tab="login">ĐĂNG NHẬP</button>
+            <button type="button" class="tab" data-tab="register">ĐĂNG KÝ</button>
+          </div>
+          <label>TÊN ĐĂNG NHẬP
+            <input id="userInput" maxlength="16" autocomplete="username" autocapitalize="none" spellcheck="false" required>
           </label>
-          <label>PHÒNG
-            <input id="roomInput" maxlength="16" placeholder="sanh-chinh">
+          <label>MẬT KHẨU
+            <input id="passInput" type="password" maxlength="64" autocomplete="current-password" required>
+          </label>
+          <label class="reg-only">TÊN HIỂN THỊ
+            <input id="regNameInput" maxlength="12" placeholder="Tay chơi">
           </label>
           <details>
             <summary>MÁY CHỦ</summary>
             <input id="serverInput" spellcheck="false">
           </details>
-          <button type="submit" class="btn btn-gold big">▶ VÀO BÀN</button>
-          <p id="lobbyMsg" class="msg"></p>
+          <button type="submit" class="btn btn-gold big" id="authBtn">▶ ĐĂNG NHẬP</button>
         </form>
+
+        <!-- Hồ sơ + vào bàn (sau khi đăng nhập) -->
+        <form id="joinForm" class="px-box panel hidden" autocomplete="off">
+          <div class="profile-row">
+            <button type="button" class="btn btn-mini" id="avPrev" aria-label="Ảnh trước">◀</button>
+            <div class="avatar avatar-big" id="avatarPreview"></div>
+            <button type="button" class="btn btn-mini" id="avNext" aria-label="Ảnh sau">▶</button>
+            <div class="profile-meta">
+              <span>@<b id="profUser"></b></span>
+              <span><i class="chip-ico"></i><b id="profChips">0</b></span>
+            </div>
+          </div>
+          <label>TÊN HIỂN THỊ
+            <span class="input-row">
+              <input id="nameInput" maxlength="12" required>
+              <button type="button" class="btn btn-blue" id="saveProfileBtn">LƯU</button>
+            </span>
+          </label>
+          <label>PHÒNG
+            <input id="roomInput" maxlength="16" placeholder="sanh-chinh">
+          </label>
+          <button type="submit" class="btn btn-gold big">▶ VÀO BÀN</button>
+          <button type="button" class="btn btn-red" id="logoutBtn">ĐĂNG XUẤT</button>
+        </form>
+
+        <p id="lobbyMsg" class="msg"></p>
 
         <p class="blink">INSERT COIN</p>
       </div>

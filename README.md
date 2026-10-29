@@ -8,10 +8,12 @@ xi-to/
 │   ├── index.html          # Màn hình vào bàn + bàn chơi + thumb zone
 │   ├── style.css           # Giao diện dọc 9:16, pixel art, font Press Start 2P
 │   └── script.js           # WebSocket, render bàn, âm thanh chiptune (Web Audio API)
+├── supabase/schema.sql     # Bảng accounts + sessions (chạy 1 lần trong SQL Editor)
 └── server/                 # Back-end Rust (axum + tokio)
     ├── Cargo.toml
     └── src/
-        ├── main.rs         # HTTP + WebSocket, phân phối lệnh, hẹn giờ
+        ├── main.rs         # HTTP + WebSocket, đăng nhập, phân phối lệnh, hẹn giờ
+        ├── db.rs           # Tài khoản trên Supabase (REST), băm mật khẩu
         ├── game.rs         # Trạng thái phòng, lượt đi, vòng cược, chia hũ
         └── cards.rs        # Bộ bài, xáo bài, đánh giá tay bài (+ unit test)
 ```
@@ -42,7 +44,9 @@ Server tự phục vụ luôn thư mục `client/`, nên **không cần chạy w
 Tuỳ chọn: `PORT=8080 cargo run`, hoặc `CLIENT_DIR=/duong/dan/client cargo run`.
 
 ### 3. Mở game
-- Mở **2 tab trở lên** tại http://localhost:3000, nhập tên khác nhau và **cùng tên phòng**.
+- Mở **2 tab trở lên** tại http://localhost:3000 (dùng 2 cửa sổ ẩn danh khác nhau, vì các tab
+  cùng trình duyệt dùng chung phiên đăng nhập), **đăng ký 2 tài khoản** rồi vào **cùng tên phòng**.
+- Không đặt biến Supabase thì tài khoản chỉ lưu trong RAM (mất khi tắt server), đủ để chạy thử.
 - Bấm **▶ BẮT ĐẦU VÁN** khi có từ 2 người. Sau mỗi ván, ván mới tự bắt đầu sau 7 giây.
 - Trên máy tính, bật DevTools → *Toggle device toolbar* (iPhone) để xem đúng giao diện dọc.
 
@@ -78,15 +82,38 @@ docker run --rm -p 3000:3000 xito
 Mỗi lần `git push` lên nhánh chính, Render tự build và deploy lại.
 
 **Lưu ý gói Free:** server ngủ sau khoảng 15 phút không có truy cập. Người vào đầu tiên phải chờ
-khoảng 1 phút để server thức dậy. Mỗi lần server ngủ hoặc deploy lại, mọi phòng và số chip bị xoá
-(game lưu trạng thái trong RAM).
+khoảng 1 phút để server thức dậy. Mỗi lần server ngủ hoặc deploy lại, các phòng đang chơi bị xoá
+(ván dở mất), nhưng **tài khoản và số chip vẫn còn** trên Supabase.
+
+## Tài khoản người chơi (Supabase)
+
+Người chơi phải đăng ký / đăng nhập (tên đăng nhập + mật khẩu) mới vào được bàn. Tài khoản lưu
+**tên hiển thị, avatar và số chip**. Chip được lưu sau mỗi ván và khi rời bàn.
+
+1. Tạo project tại https://supabase.com (gói Free là đủ).
+2. **SQL Editor** → dán nội dung `supabase/schema.sql` → **Run**.
+3. **Project Settings → API Keys**: lấy *Project URL* và **secret key** (`sb_secret_...`,
+   hoặc khoá `service_role` kiểu cũ).
+4. Đặt biến môi trường cho server (trên Render: tab **Environment** của service):
+   ```
+   SUPABASE_URL=https://xxxx.supabase.co
+   SUPABASE_SERVICE_KEY=sb_secret_...
+   ```
+   Chạy trên máy: `SUPABASE_URL=... SUPABASE_SERVICE_KEY=... cargo run --release`.
+
+Bảo mật:
+- **Chỉ server** giữ secret key; client không bao giờ nói chuyện trực tiếp với Supabase.
+  Các bảng bật RLS và không có policy, nên khoá công khai không đọc được gì.
+- Mật khẩu băm bằng **Argon2id** ở server. Đăng nhập xong server cấp một token (client giữ trong
+  `localStorage` để tự đăng nhập lại); DB chỉ lưu SHA-256 của token.
+- Mỗi tài khoản chỉ ở một nơi: đăng nhập ở thiết bị mới sẽ đẩy phiên cũ ra (chip vẫn được lưu).
 
 ## Luật chơi đã cài đặt
 
 | Mục | Giá trị |
 |---|---|
 | Số người / bàn | 2–6 |
-| Chip khởi đầu | 1000 (hết chip sẽ được tự nạp lại khi vào ván mới) |
+| Chip khởi đầu | 1000 khi tạo tài khoản (hết chip sẽ được tự nạp lại khi vào ván mới) |
 | Cược sàn (ante) | 10 |
 | Tố tối thiểu | 20, hoặc bằng mức tố lớn nhất trước đó trong vòng |
 | Thời gian mỗi lượt | 25 giây. Hết giờ thì tự **Xem** nếu không phải bỏ thêm tiền, ngược lại tự **Úp bỏ** |
@@ -110,7 +137,13 @@ khoảng 1 phút để server thức dậy. Mỗi lần server ngủ hoặc depl
 
 **Client → Server**
 ```json
-{ "type": "join",  "name": "Tuấn", "room": "sanh-chinh" }
+{ "type": "register", "username": "tuan_99", "password": "******", "name": "Tuấn" }
+{ "type": "login",    "username": "tuan_99", "password": "******" }
+{ "type": "resume",   "token": "..." }     // đăng nhập lại bằng token đã lưu
+{ "type": "logout" }
+{ "type": "profile",  "name": "Tuấn", "avatar": 4242 }  // chỉ khi không ngồi bàn
+{ "type": "join",     "room": "sanh-chinh" }             // cần đăng nhập
+{ "type": "leave" }                                      // rời bàn, vẫn giữ đăng nhập
 { "type": "start" }
 { "type": "fold" }
 { "type": "call" }                 // theo, hoặc xem (check) khi to_call = 0
@@ -120,11 +153,15 @@ khoảng 1 phút để server thức dậy. Mỗi lần server ngủ hoặc depl
 **Server → Client**
 | `type` | Nội dung |
 |---|---|
+| `auth` | đăng nhập thành công: `token` + `profile` `{ username, name, avatar, chips }` |
+| `profile` | hồ sơ mới (sau khi lưu hồ sơ hoặc rời bàn) |
+| `logged_out` | đã đăng xuất |
 | `welcome` | `id` của bạn, tên phòng |
 | `hole` | lá tẩy của riêng bạn: `{ "card": { "r": 14, "s": "H" } }` |
 | `state` | toàn bộ trạng thái bàn **đã lọc theo người xem**: người chơi, hũ, lượt, `to_call`, `min_raise`, `max_raise`, thời gian còn lại, kết quả ván |
 | `event` | sự kiện ngắn để phát âm thanh/hiệu ứng: `deal`, `call`, `raise`, `allin`, `check`, `fold`, `win`, `your_turn`, ... |
-| `error` | thông báo lỗi (sai lượt, tố thiếu, ...) |
+| `error` | thông báo lỗi (sai lượt, tố thiếu, ...). Có thể kèm `code`: `auth` (token hết hạn), `kicked` (đăng nhập nơi khác, socket sẽ bị đóng) |
+| `info` | thông báo ngắn (vd. "Đã lưu hồ sơ") |
 
 Lá bài: `r` = 2..14 (J=11, Q=12, K=13, A=14), `s` = `S` (Bích), `C` (Chuồn), `D` (Rô), `H` (Cơ).
 
